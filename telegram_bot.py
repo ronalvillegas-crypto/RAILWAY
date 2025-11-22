@@ -32,6 +32,40 @@ class TelegramBotReal:
             logger.error(f"Error Telegram: {e}")
             return False
     
+    def enviar_señal_movimiento(self, señal, mensaje_extra=""):
+        """Enviar señal de movimiento significativo"""
+        emoji = "🚀" if señal['direccion'] == "COMPRA" else "📉"
+        
+        mensaje = f"""
+{emoji} <b>🚨 MOVIMIENTO SIGNIFICATIVO DETECTADO</b> {emoji}
+
+🏆 <b>PAR:</b> {señal['par']}
+🎯 <b>DIRECCIÓN:</b> <b>{señal['direccion']}</b>
+💰 <b>PRECIO ACTUAL:</b> {señal['precio_actual']:.5f}
+
+📊 <b>INFORMACIÓN DEL MOVIMIENTO:</b>
+• <b>Movimiento:</b> {señal['movimiento_porcentual']:+.2f}%
+• <b>Periodo:</b> {señal['periodo_movimiento']}
+• <b>Tipo Activo:</b> {señal['tipo_activo'].upper()}
+• <b>Confianza:</b> 🎯 {señal['confianza']}
+
+⚡ <b>ESTRATEGIA AJUSTADA:</b>
+• Take Profit 1: {señal['tp1']:.5f}
+• Take Profit 2: {señal['tp2']:.5f}  
+• Stop Loss: {señal['sl']:.5f}
+• DCA Nivel 1: {señal['dca_1']:.5f}
+• DCA Nivel 2: {señal['dca_2']:.5f}
+
+💡 <b>Motivo:</b> Movimiento significativo del {abs(señal['movimiento_porcentual']):.2f}% 
+detectado en los últimos {señal['periodo_movimiento']}
+
+{mensaje_extra}
+
+⏰ <b>HORA DETECCIÓN:</b> {señal['timestamp']}
+        """
+        
+        return self.enviar_mensaje(mensaje.strip())
+    
     def enviar_señal_completa(self, señal, mensaje_extra=""):
         """Enviar señal COMPLETA con análisis S/R"""
         emoji = "🟢" if señal['direccion'] == "COMPRA" else "🔴"

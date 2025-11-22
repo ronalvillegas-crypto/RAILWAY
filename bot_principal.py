@@ -82,23 +82,23 @@ class BotTradingFinal:
             logger.error("❌ No se pudo enviar mensaje de inicio")
     
     def analizar_par(self, par):
-        """Analizar un par con la estrategia avanzada"""
+        """Analizar par con estrategia RÁPIDA + MOVIMIENTOS"""
         try:
-            from monitor_mercado import MonitorMercado
-            from estrategia_dca import EstrategiaDCA
+            from estrategia_rapida import EstrategiaRapida
+            from telegram_bot import TelegramBotReal
             
-            estrategia = EstrategiaDCA()
-            
-            # 🎯 USAR ESTRATEGIA AVANZADA (Backtesting + Original)
-            señal = estrategia.generar_señal_avanzada(par)
+            estrategia = EstrategiaRapida()
+            señal = estrategia.generar_señal_eficiente(par)
             
             if señal:
-                logger.info(f"🎯 Señal detectada: {par} {señal['direccion']} - {señal['estrategia']}")
-                
-                # Enviar señal a Telegram
-                from telegram_bot import TelegramBotReal
                 telegram = TelegramBotReal()
-                telegram.enviar_señal_completa(señal, "🚀 ESTRATEGIA BACKTESTING ACTIVADA")
+                
+                if señal.get('tipo_señal') == 'MOVIMIENTO':
+                    logger.info(f"🚨 MOVIMIENTO: {par} {señal['direccion']} - {señal['movimiento_porcentual']:.2f}%")
+                    telegram.enviar_señal_movimiento(señal, "⚡ MOVIMIENTO SIGNIFICATIVO")
+                else:
+                    logger.info(f"🎯 MOMENTUM: {par} {señal['direccion']}")
+                    telegram.enviar_señal_completa(señal, "📊 SEÑAL MOMENTUM")
                 
                 return señal
             return None
