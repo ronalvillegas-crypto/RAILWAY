@@ -1,4 +1,4 @@
-# bot_principal.py - BOT FINAL 100% FUNCIONAL
+# bot_principal.py - BOT FINAL 100% FUNCIONAL + NOTICIAS
 import os
 import time
 import schedule
@@ -73,6 +73,7 @@ class BotTradingFinal:
             "🔁 Frecuencia: Análisis cada 2 minutos\n"
             "💰 Capital Inicial: $1,000\n"
             "⚡ Gestión Riesgo: Stop-Loss Global 50%\n"
+            "📰 Sistema Alertas: Noticias alto impacto activado\n"
             "🎊 ¡Bot operativo con estrategia de alta rentabilidad!"
         )
         
@@ -80,6 +81,26 @@ class BotTradingFinal:
             logger.info("✅ MENSAJE DE INICIO CON ESTRATEGIA BACKTESTING ENVIADO")
         else:
             logger.error("❌ No se pudo enviar mensaje de inicio")
+    
+    def verificar_noticias_impacto(self):
+        """Verificar noticias de alto impacto cada 10 minutos"""
+        try:
+            from noticias_alerta import AlertaNoticias
+            from telegram_bot import TelegramBotReal
+            
+            alertas = AlertaNoticias().obtener_alertas_activas()
+            
+            for alerta in alertas:
+                logger.info(f"📰 ALERTA NOTICIA: {alerta['nombre']} - Impacto: {alerta['impacto']}")
+                
+                telegram = TelegramBotReal()
+                telegram.enviar_alerta_noticia(alerta)
+                
+            return len(alertas)
+            
+        except Exception as e:
+            logger.error(f"❌ Error verificando noticias: {e}")
+            return 0
     
     def analizar_par(self, par):
         """Analizar par con estrategia RÁPIDA + MOVIMIENTOS"""
@@ -168,10 +189,16 @@ class BotTradingFinal:
         # Programar análisis cada 2 minutos
         schedule.every(2).minutes.do(self.ciclo_analisis)
         
+        # Programar verificación de noticias cada 10 minutos
+        schedule.every(10).minutes.do(self.verificar_noticias_impacto)
+        
         # Ejecutar primer análisis inmediato
         self.ciclo_analisis()
         
-        logger.info("✅ Bot en ejecución - Monitoreando cada 2 minutos")
+        # Ejecutar primera verificación de noticias
+        self.verificar_noticias_impacto()
+        
+        logger.info("✅ Bot en ejecución - Monitoreando cada 2 minutos + Noticias cada 10min")
         
         # Bucle principal
         while self.activo:
@@ -201,7 +228,8 @@ if __name__ == "__main__":
     print("📍 Telegram: CONECTADO")
     print("🎯 Estrategia: S/R Etapa 1 + Backtesting")
     print("⏰ Frecuencia: Cada 2 minutos")
-    print("📈 Pares: 25+ Instrumentos")
+    print("📈 Pares: 25+ Instrumentos") 
+    print("📰 Alertas: Noticias alto impacto activado")
     print("=" * 70)
     
     bot = BotTradingFinal()

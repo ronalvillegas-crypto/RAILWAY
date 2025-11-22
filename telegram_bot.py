@@ -1,4 +1,4 @@
-# telegram_bot.py - Comunicaciones REALES CON ESTRATEGIA S/R
+# telegram_bot.py - Comunicaciones REALES CON ESTRATEGIA S/R + NOTICIAS
 import requests
 import logging
 from datetime import datetime
@@ -31,6 +31,54 @@ class TelegramBotReal:
         except Exception as e:
             logger.error(f"Error Telegram: {e}")
             return False
+
+    def enviar_alerta_noticia(self, alerta):
+        """Enviar alerta de noticia de alto impacto"""
+        emoji_impacto = "🔴" if alerta['impacto'] == 'MUY_ALTO' else "🟡" if alerta['impacto'] == 'ALTO' else "🔵"
+        
+        # Formatear datos de la noticia
+        datos_noticia = f"""
+• Valor Actual: {alerta['datos']['valor_actual']}
+• Valor Esperado: {alerta['datos']['valor_esperado']} 
+• Resultado: {alerta['datos']['resultado'].replace('_', ' ').title()}
+"""
+
+        # Formatear efectos en mercados
+        efectos = ""
+        if alerta['efectos_mercado']['forex']:
+            forex = alerta['efectos_mercado']['forex']
+            efectos += f"💵 <b>Forex:</b> USD {forex.get('USD', 'NEUTRO')}, EUR {forex.get('EUR', 'NEUTRO')}\n"
+        
+        if alerta['efectos_mercado']['oro'] != 'NEUTRO':
+            efectos += f"🪙 <b>Oro:</b> {alerta['efectos_mercado']['oro']}\n"
+            
+        if alerta['efectos_mercado']['acciones'] != 'NEUTRO':
+            efectos += f"📈 <b>Acciones:</b> {alerta['efectos_mercado']['acciones']}\n"
+
+        # Formatear recomendaciones
+        recomendaciones = "\n".join([f"• {rec}" for rec in alerta['recomendaciones']]) if alerta['recomendaciones'] else "• Monitorear mercado"
+
+        mensaje = f"""
+{emoji_impacto} <b>📰 ALARMA NOTICIA ALTO IMPACTO</b> {emoji_impacto}
+
+🏛️ <b>País:</b> {alerta['pais']}
+📊 <b>Dato:</b> {alerta['nombre']}
+🎯 <b>Impacto:</b> {alerta['impacto']}
+
+{datos_noticia}
+
+📈 <b>EFECTOS ESTIMADOS EN MERCADOS:</b>
+{efectos}
+
+💡 <b>RECOMENDACIONES DE TRADING:</b>
+{recomendaciones}
+
+🔍 <b>Símbolos Afectados:</b> {', '.join(alerta['simbolos_afectados'])}
+
+⏰ <b>Hora Publicación:</b> {alerta['timestamp']}
+"""
+
+        return self.enviar_mensaje(mensaje.strip())
     
     def enviar_señal_movimiento(self, señal, mensaje_extra=""):
         """Enviar señal de movimiento significativo"""
