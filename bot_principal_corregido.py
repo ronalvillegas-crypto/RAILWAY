@@ -1,15 +1,19 @@
-# bot_principal.py - BOT FINAL 100% FUNCIONAL + NOTICIAS
-import os
+# bot_principal.py - BOT FINAL S/R + MOVIMIENTOS + NOTICIAS
 import time
 import schedule
-import requests
 from datetime import datetime
 import logging
 import sys
-from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, TOP_PARES
-from telegram_bot import TelegramBotReal
 
-# Configurar logging
+from config import TOP_PARES, RISK_MANAGEMENT
+from telegram_bot import TelegramBotReal
+from estrategia_dca import EstrategiaDCA
+from estrategia_rapida import EstrategiaRapida
+from noticias_alerta import AlertaNoticias
+
+# =========================
+# CONFIGURACIÓN DE LOGGING
+# =========================
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -17,101 +21,65 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 class BotTradingFinal:
     def __init__(self):
         self.activo = True
         self.ciclo = 0
-        # Usar configuración centralizada
-        self.token = TELEGRAM_TOKEN
-        self.chat_id = TELEGRAM_CHAT_ID
-        # Cliente de Telegram unificado
+
+        # Módulos principales
         self.telegram = TelegramBotReal()
-        # Estrategias principales
-        from estrategia_dca import EstrategiaDCA
-        from estrategia_rapida import EstrategiaRapida
-        self.estrategia_dca = EstrategiaDCA()
-        self.estrategia_rapida = EstrategiaRapida()
+        self.estrategia_sr = EstrategiaDCA()          # Soporte/Resistencia + Backtesting
+        self.estrategia_rapida = EstrategiaRapida()  # Momentum + Movimientos fuertes
+        self.alertas_noticias = AlertaNoticias()     # Noticias alto impacto
 
-        logger.info("🚀 INICIANDO BOT TRADING FINAL")
-        logger.info(f"💬 Chat ID configurado: {self.chat_id}")
+        # Pares a monitorear (top 10 para no saturar)
+        self.pares = TOP_PARES[:10]
 
-        # ✅✅✅ ENVIAR MENSAJE DE INICIO INMEDIATO
+        logger.info("🚀 INICIANDO BOT TRADING FINAL (S/R + Movimientos + Noticias)")
+        logger.info(f"📊 Pares configurados: {', '.join(self.pares)}")
+
+        # Enviar mensaje de inicio
         self.enviar_mensaje_inicio()
 
-    def enviar_telegram(self, mensaje):
-        """Enviar mensaje a Telegram usando TelegramBotReal"""
-        try:
-            if not self.telegram:
-                self.telegram = TelegramBotReal()
-            return self.telegram.enviar_mensaje(mensaje)
-        except Exception as e:
-            logger.error(f"❌ Error enviando mensaje: {e}")
-            return False
-
+    # =========================
+    # MENSAJE DE INICIO
+    # =========================
     def enviar_mensaje_inicio(self):
-        """ENVIAR MENSAJE DE INICIO ACTUALIZADO CON ESTRATEGIA BACKTESTING"""
-        mensaje = (
-            "🚀 BOT TRADING INICIADO - ESTRATEGIA BACKTESTING INTEGRADA\n"
-            f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            "📍 Servidor: Railway (US-West)\n"
-            "✅ Configuración: 100% OPTIMIZADA\n"
-            "🎯 Estrategia: S/R Final Perfecta (Backtesting Comprobado)\n"
-            "📊 Resultados Backtesting:\n"
-            "   • Win Rate: 51.5%\n" 
-            "   • Return Total: 9,432%\n"
-            "   • Drawdown Máx: 9.88%\n"
-            "📈 Pares Activos: 25+ Instrumentos\n"
-            "   • Forex: EURUSD, GBPUSD, USDJPY, etc.\n"
-            "   • Materias Primas: Oro, Plata, Petróleo\n"
-            "   • Índices: SP500, Nasdaq, Dow Jones\n"
-            "🔁 Frecuencia: Análisis cada 2 minutos\n"
-            "📰 Módulo de noticias: ACTIVO (alto impacto)\n"
-            "📡 Fuente de datos: Yahoo Finance + Simulación Avanzada\n"
-        )
-        self.enviar_telegram(mensaje)
+        """Enviar mensaje de inicio usando el formato del TelegramBotReal"""
+        config = {
+            "pares": self.pares,
+            "capital_inicial": RISK_MANAGEMENT.get("capital_inicial", 1000),
+            "max_drawdown": int(RISK_MANAGEMENT.get("max_drawdown", 0.50) * 100),
+            "consecutive_loss_limit": RISK_MANAGEMENT.get("consecutive_loss_limit", 5)
+        }
 
-    def analizar_par(self, par):
-        """Analizar par priorizando ESTRATEGIA BACKTESTING + DCA y luego movimientos rápidos"""
+        # Si existe el método especial de inicio, lo usamos
+        if hasattr(self.telegram, "enviar_mensaje_inicio_bot"):
+            self.telegram.enviar_mensaje_inicio_bot(config)
+        else:
+            # Mensaje genérico
+            mensaje = f"""
+🤖 BOT TRADING INICIADO
+
+• Pares: {', '.join(self.pares)}
+• Capital Inicial: ${config['capital_inicial']:.2f}
+• Stop-loss Global: {config['max_drawdown']}%
+• Módulos: S/R + Movimientos fuertes + Noticias alto impacto
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+            self.telegram.enviar_mensaje(mensaje.strip())
+
+    # =========================
+    # NOTICIAS
+    # =========================
+    def verificar_noticias_impacto(self):
+        """Verificar noticias de alto impacto cada X minutos"""
         try:
-            señal = None
-
-            # 1️⃣ Intentar primero señal del backtesting (S/R Final Perfecta + DCA)
-            if hasattr(self, "estrategia_dca") and self.estrategia_dca:
-                señal = self.estrategia_dca.generar_señal_avanzada(par)
-                if señal:
-                    logger.info(f"🎯 SEÑAL BACKTESTING DETECTADA: {par} {señal['direccion']}")
-                    # Enviar con formato completo S/R
-                    self.telegram.enviar_señal_completa(señal, "📊 SEÑAL S/R FINAL PERFECTA (BACKTESTING)")
-                    return señal
-
-            # 2️⃣ Si no hay señal de backtesting, usar estrategia rápida/movimientos
-            if hasattr(self, "estrategia_rapida") and self.estrategia_rapida:
-                señal = self.estrategia_rapida.generar_señal_eficiente(par)
-                if señal:
-                    if señal.get('tipo_señal') == 'MOVIMIENTO':
-                        logger.info(f"🚨 MOVIMIENTO: {par} {señal['direccion']} - {señal['movimiento_porcentual']:.2f}%")
-                        self.telegram.enviar_señal_movimiento(señal, "⚡ MOVIMIENTO SIGNIFICATIVO")
-                    else:
-                        logger.info(f"🎯 MOMENTUM: {par} {señal['direccion']}")
-                        self.telegram.enviar_señal_completa(señal, "📊 SEÑAL MOMENTUM")
-                    return señal
-
-            return None
-
-        except Exception as e:
-            logger.error(f"❌ Error analizando {par}: {e}")
-            return None
-
-    def verificar_noticias(self):
-        """Verificar noticias de alto impacto y enviar alertas"""
-        try:
-            from noticias_alerta import AlertaNoticias
-            noticias = AlertaNoticias()
-            alertas = noticias.obtener_alertas_activas()
-
-            logger.info(f"📰 Noticias encontradas: {len(alertas)}")
+            alertas = self.alertas_noticias.obtener_alertas_activas()
 
             for alerta in alertas:
+                logger.info(f"📰 ALERTA NOTICIA: {alerta['nombre']} - Impacto: {alerta['impacto']}")
                 self.telegram.enviar_alerta_noticia(alerta)
 
             return len(alertas)
@@ -120,88 +88,171 @@ class BotTradingFinal:
             logger.error(f"❌ Error verificando noticias: {e}")
             return 0
 
+    # =========================
+    # ANÁLISIS POR PAR
+    # =========================
+    def analizar_par(self, par):
+        """
+        Analizar un par y enviar:
+        1) Señal por Soporte/Resistencia (backtesting)
+        2) Señal por movimiento fuerte en %
+        3) Señal momentum rápida (si aplica)
+        """
+        señal_enviada = None
+
+        # 1️⃣ Estrategia S/R (Soporte y Resistencia + Backtesting)
+        try:
+            señal_sr = self.estrategia_sr.generar_señal_avanzada(par)
+            if señal_sr:
+                logger.info(f"🏔️ S/R: {par} {señal_sr['direccion']} - Estrategia {señal_sr.get('estrategia', '')}")
+                # Señal completa: se muestra S/R, TP, SL, DCA
+                self.telegram.enviar_señal_completa(
+                    señal_sr,
+                    "🏔️ Señal generada por Soporte/Resistencia + Backtesting"
+                )
+                señal_enviada = señal_sr
+        except Exception as e:
+            logger.error(f"❌ Error en estrategia S/R para {par}: {e}")
+
+        # 2️⃣ Estrategia Rápida (Movimiento fuerte o Momentum)
+        try:
+            señal_rapida = self.estrategia_rapida.generar_señal_eficiente(par)
+
+            if señal_rapida:
+                if señal_rapida.get('tipo_señal') == 'MOVIMIENTO':
+                    # Movimiento fuerte en % (alerta de vigilancia)
+                    logger.info(
+                        f"🚨 MOVIMIENTO: {par} {señal_rapida['direccion']} "
+                        f"- {señal_rapida['movimiento_porcentual']:.2f}% ({señal_rapida['periodo_movimiento']})"
+                    )
+                    self.telegram.enviar_señal_movimiento(
+                        señal_rapida,
+                        "⚡ Cambio porcentual fuerte, vigilancia del par recomendada"
+                    )
+                else:
+                    # Señal momentum "normal"
+                    logger.info(f"📊 MOMENTUM: {par} {señal_rapida['direccion']}")
+                    self.telegram.enviar_señal_completa(
+                        señal_rapida,
+                        "📊 Señal de momentum rápido"
+                    )
+
+                # Si no hubo señal S/R, devolvemos esta
+                if not señal_enviada:
+                    señal_enviada = señal_rapida
+
+        except Exception as e:
+            logger.error(f"❌ Error en estrategia rápida para {par}: {e}")
+
+        return señal_enviada
+
+    # =========================
+    # CICLO PRINCIPAL
+    # =========================
     def ciclo_analisis(self):
-        """Ciclo principal de análisis"""
-        if not self.activo:
-            logger.warning("⚠️ Bot inactivo, se omite ciclo de análisis")
-            return
+        """Ciclo principal de análisis con todos los pares"""
+        self.ciclo += 1
+        logger.info(
+            f"🔄 CICLO #{self.ciclo} - {datetime.now().strftime('%H:%M:%S')} "
+            f"(S/R + Movimientos + Noticias)"
+        )
 
         try:
-            logger.info("🔁 INICIANDO NUEVO CICLO DE ANÁLISIS (BACKTESTING + RÁPIDA)")
-            self.ciclo += 1
+            señales_totales = 0
+            señales_sr = 0
+            señales_mov = 0
 
-            # Usar TOP_PARES directamente desde config (limitado a 10 por ciclo para no saturar)
-            pares = TOP_PARES[:10]
-
-            señales_generadas = 0
-            señales_backtesting = 0
-
-            for i, par in enumerate(pares):
+            for i, par in enumerate(self.pares):
                 if not self.activo:
                     break
 
-                logger.info(f"🔍 Analizando {par} ({i+1}/{len(pares)})")
+                logger.info(f"🔍 Analizando {par} ({i + 1}/{len(self.pares)})")
                 señal = self.analizar_par(par)
 
                 if señal:
-                    señales_generadas += 1
-                    if señal.get('estrategia') == 'S/R Final Perfecta':
-                        señales_backtesting += 1
-                        logger.info(f"🎯 SEÑAL BACKTESTING: {par} {señal['direccion']}")
-                    else:
-                        logger.info(f"📊 SEÑAL ORIGINAL/MOVIMIENTO: {par} {señal['direccion']}")
+                    señales_totales += 1
+                    if señal.get('estrategia', '').startswith('S/R'):
+                        señales_sr += 1
+                    if señal.get('tipo_señal') == 'MOVIMIENTO':
+                        señales_mov += 1
 
-                # Pequeña pausa entre pares para no saturar la API
-                if i < len(pares) - 1:
+                # Pausa pequeña para no saturar APIs
+                if i < len(self.pares) - 1:
                     time.sleep(2)
 
-            logger.info(f"✅ Ciclo #{self.ciclo} completado - Señales: {señales_generadas} ({señales_backtesting} backtesting)")
+            logger.info(
+                f"✅ Ciclo #{self.ciclo} completado - "
+                f"Señales: {señales_totales} | S/R: {señales_sr} | Movimientos: {señales_mov}"
+            )
 
-            # Enviar estado cada 5 ciclos
+            # Cada 5 ciclos, enviar mini-reporte a Telegram
             if self.ciclo % 5 == 0:
-                self.enviar_telegram(
-                    f"📊 REPORTE ESTRATEGIA BACKTESTING\n"
-                    f"🔁 Ciclos completados: {self.ciclo}\n"
-                    f"🎯 Señales totales: {señales_generadas}\n"
-                    f"🚀 Señales Backtesting: {señales_backtesting}\n"
-                    f"📈 Pares monitoreados: {len(pares)}\n"
-                    f"⏰ Último análisis: {datetime.now().strftime('%H:%M:%S')}\n"
-                    f"✅ Bot funcionando con estrategia optimizada"
-                )
+                resumen = f"""
+📊 <b>REPORTE RÁPIDO BOT</b>
+
+🔁 Ciclos completados: {self.ciclo}
+🎯 Señales totales último ciclo: {señales_totales}
+🏔️ Señales S/R: {señales_sr}
+⚡ Señales por movimiento fuerte: {señales_mov}
+📈 Pares monitoreados: {len(self.pares)}
+⏰ Último análisis: {datetime.now().strftime('%H:%M:%S')}
+"""
+                self.telegram.enviar_mensaje(resumen.strip())
 
         except Exception as e:
             logger.error(f"💥 Error en ciclo análisis: {e}")
-            # Enviar alerta de error
-            self.enviar_telegram(f"⚠️ ERROR EN CICLO ANÁLISIS: {str(e)[:100]}...")
+            self.telegram.enviar_mensaje(
+                f"⚠️ ERROR EN CICLO ANÁLISIS:\n{str(e)[:150]}"
+            )
 
+    # =========================
+    # CONTROL START / STOP
+    # =========================
     def iniciar(self):
-        """Iniciar bot"""
-        logger.info("🎯 INICIANDO ESTRATEGIA S/R ETAPA 1 CON BACKTESTING")
+        """Iniciar bot con schedulers"""
+        logger.info("🎯 INICIANDO SCHEDULERS DEL BOT")
 
-        # Programar análisis cada 2 minutos
+        # Análisis de mercado cada 2 minutos
         schedule.every(2).minutes.do(self.ciclo_analisis)
 
-        # Programar verificación de noticias cada 10 minutos
-        schedule.every(10).minutes.do(self.verificar_noticias)
+        # Noticias alto impacto cada 10 minutos
+        schedule.every(10).minutes.do(self.verificar_noticias_impacto)
 
-        self.activo = True
-        self.enviar_telegram("✅ Bot Trading FINAL iniciado correctamente. Estrategia Backtesting + Noticias activa.")
+        # Primera ejecución inmediata
+        self.ciclo_analisis()
+        self.verificar_noticias_impacto()
+
+        logger.info("✅ Bot en ejecución - Monitoreo cada 2 minutos + Noticias cada 10 minutos")
 
         while self.activo:
-            schedule.run_pending()
-            time.sleep(1)
+            try:
+                schedule.run_pending()
+                time.sleep(30)
+            except Exception as e:
+                logger.error(f"❌ Error en bucle principal: {e}")
+                time.sleep(60)
 
     def detener(self):
         """Detener bot"""
         self.activo = False
-        self.enviar_telegram("🛑 Bot Trading FINAL detenido por el usuario.")
+        logger.info("🛑 Bot detenido")
+
+        mensaje = f"""
+🛑 BOT DETENIDO
+
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+🔁 Ciclos totales: {self.ciclo}
+📴 Servicio finalizado
+"""
+        self.telegram.enviar_mensaje(mensaje.strip())
+
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("🚀 Iniciando BOT TRADING FINAL - ESTRATEGIA BACKTESTING + NOTICIAS")
-    print("⏰ Frecuencia: Cada 2 minutos")
-    print("📈 Pares: 25+ Instrumentos") 
-    print("📰 Alertas: Noticias alto impacto activado")
+    print("🤖 BOT TRADING RAILWAY - S/R + MOVIMIENTOS + NOTICIAS")
+    print("📍 Telegram: CONECTADO vía TelegramBotReal")
+    print("🎯 Estrategias: S/R Backtesting + Momentum + Movimiento %")
+    print("📰 Alertas: Noticias alto impacto activadas")
     print("=" * 70)
 
     bot = BotTradingFinal()
