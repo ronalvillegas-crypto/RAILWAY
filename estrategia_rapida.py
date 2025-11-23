@@ -1,4 +1,4 @@
-# estrategia_rapida.py - ESTRATEGIA RÁPIDA + DETECCIÓN MOVIMIENTOS
+# estrategia_rapida.py - ESTRATEGIA RÁPIDA + DETECCIÓN MOVIMIENTOS (IMPORT CORREGIDO)
 import random
 from datetime import datetime, timedelta
 import logging
@@ -23,13 +23,8 @@ class EstrategiaRapida:
     def generar_señal_eficiente(self, par):
         """Estrategia principal que combina momentum + movimientos significativos"""
         try:
-            # IMPORT ROBUSTO CON MANEJO DE ERRORES
-            try:
-                from yahoo_api import YahooFinanceAPI
-            except ImportError as e:
-                logger.error(f"❌ No se puede importar YahooFinanceAPI: {e}")
-                return None
-                
+            # ✅ IMPORT CORREGIDO - SIN "from yahoo_api import YahooFinanceAPI"
+            from yahoo_api import YahooFinanceAPI
             from config import PARAMETROS_POR_PAR
             
             yahoo = YahooFinanceAPI()
@@ -73,6 +68,9 @@ class EstrategiaRapida:
             
             return None
             
+        except ImportError as e:
+            logger.error(f"❌ Error de importación en estrategia rápida: {e}")
+            return None
         except Exception as e:
             logger.error(f"❌ Error estrategia rápida {par}: {e}")
             return None
