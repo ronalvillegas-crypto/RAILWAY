@@ -1,4 +1,4 @@
-# yahoo_api.py - CLASE COMPLETA YahooFinanceAPI
+# yahoo_api.py - CLASE COMPLETA YahooFinanceAPI CON TIMEOUTS MEJORADOS
 import requests
 import numpy as np
 from datetime import datetime
@@ -9,51 +9,72 @@ logger = logging.getLogger(__name__)
 class YahooFinanceAPI:
     def __init__(self):
         self.base_url = "https://query1.finance.yahoo.com/v8/finance/chart"
+        self.timeout_precio = 10
+        self.timeout_ohlc = 15
+        self.max_reintentos = 2
         
     def obtener_precio_real(self, simbolo):
-        """Obtener precio actual REAL desde Yahoo Finance"""
-        try:
-            symbol_mapping = {
-                # FOREX
-                "EURUSD": "EURUSD=X", "USDCAD": "CAD=X", "EURCHF": "EURCHF=X", "EURAUD": "EURAUD=X",
-                "GBPUSD": "GBPUSD=X", "USDJPY": "JPY=X", "AUDUSD": "AUDUSD=X", "NZDUSD": "NZDUSD=X",
-                "USDCHF": "CHF=X", "GBPJPY": "GBPJPY=X",
+        """Obtener precio actual REAL desde Yahoo Finance - CON TIMEOUTS MEJORADOS"""
+        for reintento in range(self.max_reintentos):
+            try:
+                symbol_mapping = {
+                    # FOREX
+                    "EURUSD": "EURUSD=X", "USDCAD": "CAD=X", "EURCHF": "EURCHF=X", "EURAUD": "EURAUD=X",
+                    "GBPUSD": "GBPUSD=X", "USDJPY": "JPY=X", "AUDUSD": "AUDUSD=X", "NZDUSD": "NZDUSD=X",
+                    "USDCHF": "CHF=X", "GBPJPY": "GBPJPY=X",
+                    
+                    # MATERIAS PRIMAS
+                    "XAUUSD": "GC=F", "XAGUSD": "SI=F", "OILUSD": "CL=F", "XPTUSD": "PL=F",
+                    "XPDUSD": "PA=F", "NGASUSD": "NG=F", "COPPER": "HG=F",
+                    
+                    # ACCIONES/ÍNDICES
+                    "SPX500": "^GSPC", "NAS100": "^IXIC", "DJI30": "^DJI", 
+                    "GER40": "^GDAXI", "UK100": "^FTSE", "JPN225": "^N225"
+                }
                 
-                # MATERIAS PRIMAS
-                "XAUUSD": "GC=F", "XAGUSD": "SI=F", "OILUSD": "CL=F", "XPTUSD": "PL=F",
-                "XPDUSD": "PA=F", "NGASUSD": "NG=F", "COPPER": "HG=F",
+                yahoo_symbol = symbol_mapping.get(simbolo)
+                if not yahoo_symbol:
+                    logger.warning(f"❌ Símbolo no soportado: {simbolo}")
+                    return None
+                    
+                url = f"{self.base_url}/{yahoo_symbol}"
+                params = {"range": "1d", "interval": "1m"}
                 
-                # ACCIONES/ÍNDICES
-                "SPX500": "^GSPC", "NAS100": "^IXIC", "DJI30": "^DJI", 
-                "GER40": "^GDAXI", "UK100": "^FTSE", "JPN225": "^N225"
-            }
-            
-            yahoo_symbol = symbol_mapping.get(simbolo)
-            if not yahoo_symbol:
-                logger.warning(f"❌ Símbolo no soportado: {simbolo}")
+                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                
+                # CON TIMEOUT MEJORADO
+                response = requests.get(url, params=params, headers=headers, timeout=self.timeout_precio)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if "chart" in data and "result" in data["chart"] and data["chart"]["result"]:
+                        result = data["chart"]["result"][0]
+                        precio_actual = result["meta"]["regularMarketPrice"]
+                        logger.info(f"✅ {simbolo}: ${precio_actual:.5f}")
+                        return precio_actual
+                else:
+                    logger.warning(f"⚠️ Yahoo API error para {simbolo}: {response.status_code}")
+                    if reintento < self.max_reintentos - 1:
+                        logger.info(f"🔄 Reintentando {simbolo}... ({reintento + 1}/{self.max_reintentos})")
+                        continue
+                    
                 return None
                 
-            url = f"{self.base_url}/{yahoo_symbol}"
-            params = {"range": "1d", "interval": "1m"}
-            
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            response = requests.get(url, params=params, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if "chart" in data and "result" in data["chart"] and data["chart"]["result"]:
-                    result = data["chart"]["result"][0]
-                    precio_actual = result["meta"]["regularMarketPrice"]
-                    logger.info(f"✅ {simbolo}: ${precio_actual:.5f}")
-                    return precio_actual
-            else:
-                logger.warning(f"⚠️ Yahoo API error para {simbolo}: {response.status_code}")
-                
-            return None
-            
-        except Exception as e:
-            logger.error(f"❌ Error obteniendo precio {simbolo}: {e}")
-            return None
+            except requests.exceptions.Timeout:
+                logger.warning(f"⏰ Timeout obteniendo precio {simbolo} (reintento {reintento + 1})")
+                if reintento < self.max_reintentos - 1:
+                    continue
+                return None
+            except requests.exceptions.ConnectionError:
+                logger.warning(f"🔌 Error conexión obteniendo precio {simbolo} (reintento {reintento + 1})")
+                if reintento < self.max_reintentos - 1:
+                    continue
+                return None
+            except Exception as e:
+                logger.error(f"❌ Error obteniendo precio {simbolo}: {e}")
+                if reintento < self.max_reintentos - 1:
+                    continue
+                return None
 
     def obtener_datos_tecnicos(self, simbolo):
         """Obtener datos técnicos básicos"""
@@ -79,31 +100,40 @@ class YahooFinanceAPI:
             return None
 
     def obtener_datos_historicos_ohlc(self, simbolo, periodo="1d", intervalo="5m"):
-        """Obtener datos OHLC históricos para backtesting"""
-        try:
-            symbol_mapping = {
-                "EURUSD": "EURUSD=X", "USDCAD": "CAD=X", "EURCHF": "EURCHF=X", "EURAUD": "EURAUD=X",
-                "GBPUSD": "GBPUSD=X", "USDJPY": "JPY=X", "AUDUSD": "AUDUSD=X", "NZDUSD": "NZDUSD=X",
-                "USDCHF": "CHF=X", "GBPJPY": "GBPJPY=X",
-                "XAUUSD": "GC=F", "XAGUSD": "SI=F", "OILUSD": "CL=F", "XPTUSD": "PL=F",
-                "SPX500": "^GSPC", "NAS100": "^IXIC", "DJI30": "^DJI"
-            }
-            
-            yahoo_symbol = symbol_mapping.get(simbolo)
-            if not yahoo_symbol:
-                logger.warning(f"❌ Símbolo no encontrado para OHLC: {simbolo}")
-                return None
+        """Obtener datos OHLC históricos para backtesting - CON TIMEOUTS MEJORADOS"""
+        for reintento in range(self.max_reintentos):
+            try:
+                symbol_mapping = {
+                    "EURUSD": "EURUSD=X", "USDCAD": "CAD=X", "EURCHF": "EURCHF=X", "EURAUD": "EURAUD=X",
+                    "GBPUSD": "GBPUSD=X", "USDJPY": "JPY=X", "AUDUSD": "AUDUSD=X", "NZDUSD": "NZDUSD=X",
+                    "USDCHF": "CHF=X", "GBPJPY": "GBPJPY=X",
+                    "XAUUSD": "GC=F", "XAGUSD": "SI=F", "OILUSD": "CL=F", "XPTUSD": "PL=F",
+                    "SPX500": "^GSPC", "NAS100": "^IXIC", "DJI30": "^DJI"
+                }
                 
-            url = f"{self.base_url}/{yahoo_symbol}"
-            params = {
-                "range": periodo,
-                "interval": intervalo
-            }
-            
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            response = requests.get(url, params=params, headers=headers, timeout=15)
-            
-            if response.status_code == 200:
+                yahoo_symbol = symbol_mapping.get(simbolo)
+                if not yahoo_symbol:
+                    logger.warning(f"❌ Símbolo no encontrado para OHLC: {simbolo}")
+                    return None
+                    
+                url = f"{self.base_url}/{yahoo_symbol}"
+                params = {
+                    "range": periodo,
+                    "interval": intervalo
+                }
+                
+                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                
+                # CON TIMEOUT MEJORADO
+                response = requests.get(url, params=params, headers=headers, timeout=self.timeout_ohlc)
+                
+                if response.status_code != 200:
+                    logger.warning(f"⚠️ Yahoo API respondió {response.status_code} para OHLC {simbolo}")
+                    if reintento < self.max_reintentos - 1:
+                        logger.info(f"🔄 Reintentando OHLC {simbolo}... ({reintento + 1}/{self.max_reintentos})")
+                        continue
+                    return None
+
                 data = response.json()
                 if "chart" in data and "result" in data["chart"] and data["chart"]["result"]:
                     result = data["chart"]["result"][0]
@@ -133,12 +163,24 @@ class YahooFinanceAPI:
                     logger.info(f"✅ OHLC {simbolo}: {len(datos)} velas obtenidas")
                     return datos if len(datos) > 20 else None
                     
-            logger.warning(f"❌ Error en respuesta OHLC para {simbolo}")
-            return None
-            
-        except Exception as e:
-            logger.error(f"❌ Error datos OHLC {simbolo}: {e}")
-            return None
+                logger.warning(f"❌ Error en respuesta OHLC para {simbolo}")
+                return None
+                
+            except requests.exceptions.Timeout:
+                logger.warning(f"⏰ Timeout en Yahoo API OHLC {simbolo} (reintento {reintento + 1})")
+                if reintento < self.max_reintentos - 1:
+                    continue
+                return None
+            except requests.exceptions.ConnectionError:
+                logger.warning(f"🔌 Error conexión OHLC {simbolo} (reintento {reintento + 1})")
+                if reintento < self.max_reintentos - 1:
+                    continue
+                return None
+            except Exception as e:
+                logger.error(f"❌ Error datos OHLC {simbolo}: {e}")
+                if reintento < self.max_reintentos - 1:
+                    continue
+                return None
 
     def obtener_datos_tecnicos_completos(self, simbolo):
         """Obtener datos técnicos completos incluyendo OHLC"""

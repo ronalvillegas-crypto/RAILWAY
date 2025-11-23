@@ -4,6 +4,7 @@ import schedule
 from datetime import datetime
 import logging
 import sys
+import traceback
 
 from config import TOP_PARES, RISK_MANAGEMENT
 from telegram_bot import TelegramBotReal
@@ -26,6 +27,8 @@ class BotTradingFinal:
     def __init__(self):
         self.activo = True
         self.ciclo = 0
+        self.errores_consecutivos = 0
+        self.max_errores_consecutivos = 5
 
         # Módulos principales
         self.telegram = TelegramBotReal()
@@ -147,17 +150,17 @@ class BotTradingFinal:
         return señal_enviada
 
     # =========================
-    # CICLO PRINCIPAL
+    # CICLO PRINCIPAL - CON GESTIÓN DE ERRORES MEJORADA
     # =========================
     def ciclo_analisis(self):
-        """Ciclo principal de análisis con todos los pares"""
-        self.ciclo += 1
-        logger.info(
-            f"🔄 CICLO #{self.ciclo} - {datetime.now().strftime('%H:%M:%S')} "
-            f"(S/R + Movimientos + Noticias)"
-        )
-
+        """Ciclo principal de análisis con todos los pares - CON GESTIÓN DE ERRORES MEJORADA"""
         try:
+            self.ciclo += 1
+            logger.info(
+                f"🔄 CICLO #{self.ciclo} - {datetime.now().strftime('%H:%M:%S')} "
+                f"(S/R + Movimientos + Noticias)"
+            )
+
             señales_totales = 0
             señales_sr = 0
             señales_mov = 0
@@ -185,6 +188,9 @@ class BotTradingFinal:
                 f"Señales: {señales_totales} | S/R: {señales_sr} | Movimientos: {señales_mov}"
             )
 
+            # Resetear contador de errores si el ciclo fue exitoso
+            self.errores_consecutivos = 0
+
             # Cada 5 ciclos, enviar mini-reporte a Telegram
             if self.ciclo % 5 == 0:
                 resumen = f"""
@@ -200,10 +206,32 @@ class BotTradingFinal:
                 self.telegram.enviar_mensaje(resumen.strip())
 
         except Exception as e:
-            logger.error(f"💥 Error en ciclo análisis: {e}")
-            self.telegram.enviar_mensaje(
-                f"⚠️ ERROR EN CICLO ANÁLISIS:\n{str(e)[:150]}"
-            )
+            self.errores_consecutivos += 1
+            logger.error(f"💥 Error crítico en ciclo #{self.ciclo}: {e}")
+            logger.error(f"📋 Traceback: {traceback.format_exc()}")
+            
+            # Enviar alerta de error crítico
+            if self.errores_consecutivos <= 3:  # No spamear
+                self.telegram.enviar_mensaje(
+                    f"⚠️ ERROR EN CICLO ANÁLISIS #{self.ciclo}:\n"
+                    f"Error: {str(e)[:150]}\n"
+                    f"Errores consecutivos: {self.errores_consecutivos}/{self.max_errores_consecutivos}"
+                )
+            
+            # Pausa antes de reintentar (aumenta con cada error)
+            pausa_segundos = min(60 * self.errores_consecutivos, 300)  # Máximo 5 minutos
+            logger.info(f"⏸️ Pausa de {pausa_segundos} segundos antes de reintentar...")
+            time.sleep(pausa_segundos)
+            
+            # Detener bot si demasiados errores consecutivos
+            if self.errores_consecutivos >= self.max_errores_consecutivos:
+                logger.error(f"🛑 DEMASIADOS ERRORES CONSECUTIVOS ({self.errores_consecutivos}). DETENIENDO BOT.")
+                self.telegram.enviar_mensaje(
+                    f"🛑 BOT DETENIDO POR SEGURIDAD\n"
+                    f"Motivo: {self.errores_consecutivos} errores consecutivos\n"
+                    f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                )
+                self.detener()
 
     # =========================
     # CONTROL START / STOP

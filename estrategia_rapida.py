@@ -1,6 +1,9 @@
 # estrategia_rapida.py - ESTRATEGIA RÁPIDA + DETECCIÓN MOVIMIENTOS
 import random
 from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 class EstrategiaRapida:
     def __init__(self):
@@ -20,7 +23,13 @@ class EstrategiaRapida:
     def generar_señal_eficiente(self, par):
         """Estrategia principal que combina momentum + movimientos significativos"""
         try:
-            from yahoo_api import YahooFinanceAPI
+            # IMPORT ROBUSTO CON MANEJO DE ERRORES
+            try:
+                from yahoo_api import YahooFinanceAPI
+            except ImportError as e:
+                logger.error(f"❌ No se puede importar YahooFinanceAPI: {e}")
+                return None
+                
             from config import PARAMETROS_POR_PAR
             
             yahoo = YahooFinanceAPI()
@@ -28,6 +37,7 @@ class EstrategiaRapida:
             # 1. OBTENER PRECIO ACTUAL
             precio_actual = yahoo.obtener_precio_real(par)
             if not precio_actual:
+                logger.warning(f"⚠️ No se pudo obtener precio para {par}")
                 return None
             
             # 2. INICIALIZAR HISTORIAL
@@ -55,16 +65,16 @@ class EstrategiaRapida:
             
             # 5. PRIORIZAR SEÑALES
             if señal_movimiento:
-                print(f"🎯 MOVIMIENTO DETECTADO: {par} {señal_movimiento['direccion']} - {señal_movimiento['movimiento_porcentual']:.2f}%")
+                logger.info(f"🎯 MOVIMIENTO DETECTADO: {par} {señal_movimiento['direccion']} - {señal_movimiento['movimiento_porcentual']:.2f}%")
                 return señal_movimiento
             elif señal_momentum:
-                print(f"📊 SEÑAL MOMENTUM: {par} {señal_momentum['direccion']}")
+                logger.info(f"📊 SEÑAL MOMENTUM: {par} {señal_momentum['direccion']}")
                 return señal_momentum
             
             return None
             
         except Exception as e:
-            print(f"❌ Error estrategia rápida {par}: {e}")
+            logger.error(f"❌ Error estrategia rápida {par}: {e}")
             return None
     
     def _analizar_momentum(self, par, precio_actual, historial):
@@ -164,9 +174,12 @@ class EstrategiaRapida:
     
     def _obtener_tipo_activo(self, par):
         """Determinar tipo de activo para umbrales específicos"""
-        from config import PARAMETROS_POR_PAR
-        params = PARAMETROS_POR_PAR.get(par, {})
-        return params.get('tipo', 'forex')
+        try:
+            from config import PARAMETROS_POR_PAR
+            params = PARAMETROS_POR_PAR.get(par, {})
+            return params.get('tipo', 'forex')
+        except Exception:
+            return 'forex'
     
     def _calcular_rsi_avanzado(self, precios, periodo=14):
         """Calcular RSI más preciso"""
@@ -191,78 +204,94 @@ class EstrategiaRapida:
     
     def _crear_señal_momentum(self, par, precio, direccion, rsi):
         """Crear señal de momentum"""
-        from config import PARAMETROS_POR_PAR
-        params = PARAMETROS_POR_PAR.get(par, PARAMETROS_POR_PAR['EURUSD'])
-        
-        if direccion == 'COMPRA':
-            tp1 = precio * (1 + params['tp_niveles'][0])
-            tp2 = precio * (1 + params['tp_niveles'][1])
-            sl = precio * (1 - params['sl'])
-            dca1 = precio * (1 - params['dca_niveles'][0])
-            dca2 = precio * (1 - params['dca_niveles'][1])
-        else:
-            tp1 = precio * (1 - params['tp_niveles'][0])
-            tp2 = precio * (1 - params['tp_niveles'][1])
-            sl = precio * (1 + params['sl'])
-            dca1 = precio * (1 + params['dca_niveles'][0])
-            dca2 = precio * (1 + params['dca_niveles'][1])
-        
-        return {
-            'par': par,
-            'direccion': direccion,
-            'precio_actual': precio,
-            'tp1': round(tp1, 5),
-            'tp2': round(tp2, 5),
-            'sl': round(sl, 5),
-            'dca_1': round(dca1, 5),
-            'dca_2': round(dca2, 5),
-            'rsi': rsi,
-            'tendencia': 'ALCISTA' if direccion == 'COMPRA' else 'BAJISTA',
-            'winrate_esperado': params['winrate'],
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'estrategia': 'Momentum Rápido',
-            'confianza': 'ALTA',
-            'tipo_señal': 'MOMENTUM'
-        }
+        try:
+            from config import PARAMETROS_POR_PAR
+            params = PARAMETROS_POR_PAR.get(par, {})
+            
+            if not params:
+                # Parámetros por defecto si no se encuentran
+                params = {'tp_niveles': [0.015, 0.025], 'sl': 0.012, 'dca_niveles': [0.005, 0.010], 'winrate': 55}
+            
+            if direccion == 'COMPRA':
+                tp1 = precio * (1 + params['tp_niveles'][0])
+                tp2 = precio * (1 + params['tp_niveles'][1])
+                sl = precio * (1 - params['sl'])
+                dca1 = precio * (1 - params['dca_niveles'][0])
+                dca2 = precio * (1 - params['dca_niveles'][1])
+            else:
+                tp1 = precio * (1 - params['tp_niveles'][0])
+                tp2 = precio * (1 - params['tp_niveles'][1])
+                sl = precio * (1 + params['sl'])
+                dca1 = precio * (1 + params['dca_niveles'][0])
+                dca2 = precio * (1 + params['dca_niveles'][1])
+            
+            return {
+                'par': par,
+                'direccion': direccion,
+                'precio_actual': precio,
+                'tp1': round(tp1, 5),
+                'tp2': round(tp2, 5),
+                'sl': round(sl, 5),
+                'dca_1': round(dca1, 5),
+                'dca_2': round(dca2, 5),
+                'rsi': rsi,
+                'tendencia': 'ALCISTA' if direccion == 'COMPRA' else 'BAJISTA',
+                'winrate_esperado': params.get('winrate', 55),
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'estrategia': 'Momentum Rápido',
+                'confianza': 'ALTA',
+                'tipo_señal': 'MOMENTUM'
+            }
+        except Exception as e:
+            logger.error(f"❌ Error creando señal momentum para {par}: {e}")
+            return None
     
     def _crear_señal_movimiento(self, par, precio, direccion, movimiento_porcentual, periodo, tipo_activo):
         """Crear señal por movimiento significativo"""
-        from config import PARAMETROS_POR_PAR
-        params = PARAMETROS_POR_PAR.get(par, PARAMETROS_POR_PAR['EURUSD'])
-        
-        # Ajustar parámetros para señales de movimiento (más agresivos)
-        multiplier_movimiento = 1.3  # 30% más agresivo en movimientos fuertes
-        
-        if direccion == 'COMPRA':
-            tp1 = precio * (1 + params['tp_niveles'][0] * multiplier_movimiento)
-            tp2 = precio * (1 + params['tp_niveles'][1] * multiplier_movimiento)
-            sl = precio * (1 - params['sl'] * 0.8)  # SL más ajustado
-            dca1 = precio * (1 - params['dca_niveles'][0])
-            dca2 = precio * (1 - params['dca_niveles'][1])
-        else:
-            tp1 = precio * (1 - params['tp_niveles'][0] * multiplier_movimiento)
-            tp2 = precio * (1 - params['tp_niveles'][1] * multiplier_movimiento)
-            sl = precio * (1 + params['sl'] * 0.8)  # SL más ajustado
-            dca1 = precio * (1 + params['dca_niveles'][0])
-            dca2 = precio * (1 + params['dca_niveles'][1])
-        
-        return {
-            'par': par,
-            'direccion': direccion,
-            'precio_actual': precio,
-            'tp1': round(tp1, 5),
-            'tp2': round(tp2, 5),
-            'sl': round(sl, 5),
-            'dca_1': round(dca1, 5),
-            'dca_2': round(dca2, 5),
-            'rsi': 50,  # No aplica para señales de movimiento
-            'tendencia': 'FUERTE_ALCISTA' if direccion == 'COMPRA' else 'FUERTE_BAJISTA',
-            'winrate_esperado': params['winrate'],
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'estrategia': f'Movimiento {periodo}',
-            'confianza': 'MUY_ALTA',
-            'tipo_señal': 'MOVIMIENTO',
-            'movimiento_porcentual': movimiento_porcentual,
-            'periodo_movimiento': periodo,
-            'tipo_activo': tipo_activo
-        }
+        try:
+            from config import PARAMETROS_POR_PAR
+            params = PARAMETROS_POR_PAR.get(par, {})
+            
+            if not params:
+                # Parámetros por defecto si no se encuentran
+                params = {'tp_niveles': [0.015, 0.025], 'sl': 0.012, 'dca_niveles': [0.005, 0.010], 'winrate': 55}
+            
+            # Ajustar parámetros para señales de movimiento (más agresivos)
+            multiplier_movimiento = 1.3  # 30% más agresivo en movimientos fuertes
+            
+            if direccion == 'COMPRA':
+                tp1 = precio * (1 + params['tp_niveles'][0] * multiplier_movimiento)
+                tp2 = precio * (1 + params['tp_niveles'][1] * multiplier_movimiento)
+                sl = precio * (1 - params['sl'] * 0.8)  # SL más ajustado
+                dca1 = precio * (1 - params['dca_niveles'][0])
+                dca2 = precio * (1 - params['dca_niveles'][1])
+            else:
+                tp1 = precio * (1 - params['tp_niveles'][0] * multiplier_movimiento)
+                tp2 = precio * (1 - params['tp_niveles'][1] * multiplier_movimiento)
+                sl = precio * (1 + params['sl'] * 0.8)  # SL más ajustado
+                dca1 = precio * (1 + params['dca_niveles'][0])
+                dca2 = precio * (1 + params['dca_niveles'][1])
+            
+            return {
+                'par': par,
+                'direccion': direccion,
+                'precio_actual': precio,
+                'tp1': round(tp1, 5),
+                'tp2': round(tp2, 5),
+                'sl': round(sl, 5),
+                'dca_1': round(dca1, 5),
+                'dca_2': round(dca2, 5),
+                'rsi': 50,  # No aplica para señales de movimiento
+                'tendencia': 'FUERTE_ALCISTA' if direccion == 'COMPRA' else 'FUERTE_BAJISTA',
+                'winrate_esperado': params.get('winrate', 55),
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'estrategia': f'Movimiento {periodo}',
+                'confianza': 'MUY_ALTA',
+                'tipo_señal': 'MOVIMIENTO',
+                'movimiento_porcentual': movimiento_porcentual,
+                'periodo_movimiento': periodo,
+                'tipo_activo': tipo_activo
+            }
+        except Exception as e:
+            logger.error(f"❌ Error creando señal movimiento para {par}: {e}")
+            return None
