@@ -1,4 +1,4 @@
-# estrategia_dca.py - ESTRATEGIA S/R REAL CON INDICADORES REALES
+# estrategia_dca.py - ESTRATEGIA S/R REAL CON INDICADORES REALES - CORREGIDO
 import random
 from datetime import datetime
 

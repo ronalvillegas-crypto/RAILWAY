@@ -1,4 +1,4 @@
-# yahoo_api.py - API REAL para Forex y Materias Primas - VERSIÓN DEFINITIVA
+# yahoo_api.py - API REAL para Forex y Materias Primas - VERSIÓN DEFINITIVA CORREGIDA
 import requests
 import random
 import logging

@@ -1,4 +1,4 @@
-# bot_principal.py - BOT DEFINITIVO SIN ERRORES DE IMPORTACIÓN
+# bot_principal.py - BOT DEFINITIVO SIN ERRORES DE IMPORTACIÓN - VERSIÓN FINAL
 import os
 import time
 import schedule
@@ -54,6 +54,7 @@ class BotTradingFinal:
         """Enviar mensaje a Telegram"""
         try:
             if not self.chat_id:
+                logger.warning("❌ No hay CHAT_ID configurado para Telegram")
                 return False
                 
             url = f"https://api.telegram.org/bot{self.token}/sendMessage"
@@ -64,7 +65,12 @@ class BotTradingFinal:
             }
             
             response = requests.post(url, json=payload, timeout=10)
-            return response.status_code == 200
+            if response.status_code == 200:
+                logger.info("✅ Mensaje enviado a Telegram")
+                return True
+            else:
+                logger.error(f"❌ Error Telegram API: {response.status_code}")
+                return False
                 
         except Exception as e:
             logger.error(f"❌ Error enviando mensaje: {e}")
@@ -96,7 +102,20 @@ class BotTradingFinal:
             if estrategia:
                 señal = estrategia.analizar_par(par)
                 if señal:
-                    logger.info(f"🎯 Señal rápida: {par} {señal['direccion']}")
+                    logger.info(f"🎯 Señal rápida: {par} {señal['direccion']} - Confianza: {señal['confianza']}")
+                    
+                    # Enviar señal a Telegram si es de alta confianza
+                    if señal['confianza'] == "ALTA":
+                        self.enviar_telegram(
+                            f"🎯 SEÑAL ALTA CONFIABILIDAD\n"
+                            f"📈 Par: {par}\n"
+                            f"🎯 Dirección: {señal['direccion']}\n"
+                            f"💰 Precio: {señal['precio_actual']}\n"
+                            f"📊 RSI: {señal['rsi']}\n"
+                            f"🎯 Motivo: {señal['motivo_señal']}\n"
+                            f"⏰ Hora: {señal['timestamp']}"
+                        )
+                    
                     return señal
             
             # Si no hay señal o estrategia no disponible, mostrar análisis básico
@@ -193,6 +212,7 @@ if __name__ == "__main__":
     try:
         bot.iniciar()
     except KeyboardInterrupt:
+        logger.info("🛑 Bot detenido por usuario")
         bot.detener()
     except Exception as e:
         logger.error(f"💥 Error crítico: {e}")

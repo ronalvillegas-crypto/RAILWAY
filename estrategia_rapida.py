@@ -1,9 +1,9 @@
-# estrategia_rapida.py - Estrategia sin dependencias problemáticas
+# estrategia_rapida.py - Estrategia sin dependencias problemáticas - CORREGIDO
 import random
 from datetime import datetime
 
 class EstrategiaRapida:
-    """Estrategia rápida sin dependencias de Yahoo API"""
+    """Estrategia rápida sin dependencias externas - VERSIÓN CORREGIDA"""
     
     def __init__(self):
         self.precios_base = {
@@ -17,9 +17,9 @@ class EstrategiaRapida:
         }
     
     def analizar_par(self, par):
-        """Analizar par rápidamente sin dependencias externas"""
+        """Analizar par rápidamente sin dependencias externas - VERSIÓN CORREGIDA"""
         try:
-            # Precio simulado
+            # Precio simulado sin dependencias
             precio_base = self.precios_base.get(par, 1.0000)
             
             if par in ["XAUUSD", "XAGUSD", "XPTUSD"]:
@@ -39,9 +39,11 @@ class EstrategiaRapida:
                 if rsi < 35:
                     direccion = "COMPRA"
                     motivo = f"RSI Oversold ({rsi})"
+                    confianza = "ALTA" if rsi < 30 else "MEDIA"
                 elif rsi > 65:
                     direccion = "VENTA" 
                     motivo = f"RSI Overbought ({rsi})"
+                    confianza = "ALTA" if rsi > 70 else "MEDIA"
                 else:
                     return None
                 
@@ -67,7 +69,7 @@ class EstrategiaRapida:
                     'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     'fuente_datos': 'Estrategia Rápida',
                     'winrate_esperado': 55 + random.randint(0, 15),
-                    'confianza': "ALTA" if (rsi < 30 or rsi > 70) else "MEDIA",
+                    'confianza': confianza,
                     'motivo_señal': motivo
                 }
                 
